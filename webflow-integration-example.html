@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Grid.js Integration Example</title>
+  <!-- Include Grid.js CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/gridjs/dist/theme/mermaid.min.css" rel="stylesheet" />
+
+  <style>
+    #grid-wrapper {
+      padding: 20px;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    /* Custom styling for grid.js - adjust as needed */
+    .gridjs-wrapper {
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+  </style>
+</head>
+<body>
+  <div id="grid-wrapper"></div>
+
+  <!-- Include Grid.js -->
+  <script src="https://cdn.jsdelivr.net/npm/gridjs/dist/gridjs.umd.js"></script>
+
+  <script>
+    // Replace with your actual Cloudflare Worker URL after deployment
+    const WORKER_URL = 'https://grist-csv-downloader.YOUR-SUBDOMAIN.workers.dev';
+
+    // Fetch data from your Cloudflare Worker
+    fetch(WORKER_URL)
+      .then(response => response.json())
+      .then(data => {
+        // Initialize Grid.js
+        new gridjs.Grid({
+          columns: Object.keys(data[0] || {}), // Auto-detect columns from first row
+          data: data.map(row => Object.values(row)), // Convert to array of arrays
+          search: true,
+          sort: true,
+          pagination: {
+            limit: 20
+          },
+          resizable: true,
+          fixedHeader: true,
+          style: {
+            table: {
+              'font-size': '14px'
+            }
+          }
+        }).render(document.getElementById('grid-wrapper'));
+      })
+      .catch(error => {
+        console.error('Error loading data:', error);
+        document.getElementById('grid-wrapper').innerHTML =
+          '<p style="color: red;">Error loading data. Check console for details.</p>';
+      });
+  </script>
+</body>
+</html>
