@@ -2,11 +2,42 @@ function parseCSV(csvText) {
   const lines = csvText.trim().split('\n');
   if (lines.length === 0) return [];
 
-  const headers = lines[0].split(',').map(h => h.trim());
+  // Parse a CSV line handling quoted fields
+  function parseLine(line) {
+    const result = [];
+    let current = '';
+    let inQuotes = false;
+
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+      const nextChar = line[i + 1];
+
+      if (char === '"') {
+        if (inQuotes && nextChar === '"') {
+          // Escaped quote
+          current += '"';
+          i++; // Skip next quote
+        } else {
+          // Toggle quote mode
+          inQuotes = !inQuotes;
+        }
+      } else if (char === ',' && !inQuotes) {
+        // End of field
+        result.push(current);
+        current = '';
+      } else {
+        current += char;
+      }
+    }
+    result.push(current); // Add last field
+    return result;
+  }
+
+  const headers = parseLine(lines[0]);
   const data = [];
 
   for (let i = 1; i < lines.length; i++) {
-    const values = lines[i].split(',').map(v => v.trim());
+    const values = parseLine(lines[i]);
     const row = {};
     headers.forEach((header, index) => {
       row[header] = values[index] || '';
