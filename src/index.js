@@ -48,72 +48,127 @@ function parseCSV(csvText) {
   return data;
 }
 
+// Shared function to process data from Grist
+async function processGristData(env) {
+  const GRIST_URL = 'https://grist.narduli.be';
+  const DOC_ID = 'onJ2bmcLLGRAABCZkuVphP';
+  const TABLE_ID = 'Field';
+  const API_KEY = env.GRIST_API_KEY;
+
+  // Download CSV from Grist
+  const gristResponse = await fetch(
+    `${GRIST_URL}/api/docs/${DOC_ID}/download/csv?tableId=${TABLE_ID}`,
+    {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${API_KEY}`
+      }
+    }
+  );
+
+  if (!gristResponse.ok) {
+    throw new Error(`Grist API error: ${gristResponse.status}`);
+  }
+
+  // Get and parse CSV data
+  const csvData = await gristResponse.text();
+  let jsonData = parseCSV(csvData);
+
+  // Filter by Release = true
+  jsonData = jsonData.filter(record => record.Release === 'true' || record.Release === true);
+
+  // Deduplicate by Location (but keep records with no Display Name)
+  const seen = new Map();
+  jsonData = jsonData.filter(record => {
+    // Keep records without Display Name (don't deduplicate these)
+    if (!record['Display Name'] || record['Display Name'].trim() === '') {
+      return true;
+    }
+
+    // Deduplicate by Location for records with Display Name
+    const location = record.Location || '';
+    if (seen.has(location)) {
+      return false; // Skip duplicate location
+    }
+    seen.set(location, true);
+    return true;
+  });
+
+  return jsonData;
+}
+
 export default {
-  async fetch(request, env, ctx) {
-    // Grist configuration
-    const GRIST_URL = 'https://grist.narduli.be';
-    const DOC_ID = 'onJ2bmcLLGRAABCZkuVphP';
-    const TABLE_ID = 'Field';
-    const API_KEY = env.GRIST_API_KEY;
-    const CACHE_DURATION = 300; // Cache for 5 minutes
-
-    const cache = caches.default;
-    const cacheKey = new Request(request.url);
-
+  // Scheduled event handler - runs on CRON schedule
+  async scheduled(event, env, ctx) {
     try {
-      // Check cache first
-      let response = await cache.match(cacheKey);
+      console.log('Running scheduled data update...');
 
-      if (!response) {
-        // Download CSV from Grist
-        const gristResponse = await fetch(
-          `${GRIST_URL}/api/docs/${DOC_ID}/download/csv?tableId=${TABLE_ID}`,
+      const jsonData = await processGristData(env);
+
+      // Store in R2
+      await env.IMMERSION_BUCKET.put(
+        'credits.json',
+        JSON.stringify(jsonData, null, 2),
+        {
+          httpMetadata: {
+            contentType: 'application/json'
+          }
+        }
+      );
+
+      console.log(`Stored ${jsonData.length} records to R2`);
+    } catch (error) {
+      console.error('Scheduled update failed:', error);
+    }
+  },
+
+  // HTTP request handler - serves data from R2
+  async fetch(request, env, ctx) {
+    try {
+      // Get data from R2
+      const object = await env.IMMERSION_BUCKET.get('credits.json');
+
+      if (!object) {
+        // If R2 data doesn't exist yet, fetch and store it
+        const jsonData = await processGristData(env);
+
+        await env.IMMERSION_BUCKET.put(
+          'credits.json',
+          JSON.stringify(jsonData, null, 2),
           {
-            method: 'GET',
-            headers: {
-              'Authorization': `Bearer ${API_KEY}`
+            httpMetadata: {
+              contentType: 'application/json'
             }
           }
         );
 
-        if (!gristResponse.ok) {
-          throw new Error(`Grist API error: ${gristResponse.status}`);
-        }
-
-        // Get and parse CSV data
-        const csvData = await gristResponse.text();
-        let jsonData = parseCSV(csvData);
-
-        // Deduplicate by Display Name + Context
-        const seen = new Map();
-        jsonData = jsonData.filter(record => {
-          const key = `${record['Display Name']}|${record.Context}`;
-          if (seen.has(key)) {
-            return false; // Skip duplicate
-          }
-          seen.set(key, true);
-          return true;
-        });
-
-        // Create response with CORS headers
-        response = new Response(
+        return new Response(
           JSON.stringify(jsonData, null, 2),
           {
             headers: {
               'Content-Type': 'application/json',
               'Access-Control-Allow-Origin': '*',
               'Access-Control-Allow-Methods': 'GET, OPTIONS',
-              'Cache-Control': `public, max-age=${CACHE_DURATION}`
+              'Cache-Control': 'public, max-age=300'
             },
             status: 200
           }
         );
-
-        // Store in cache
-        ctx.waitUntil(cache.put(cacheKey, response.clone()));
       }
 
-      return response;
+      // Return data from R2
+      return new Response(
+        await object.text(),
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'GET, OPTIONS',
+            'Cache-Control': 'public, max-age=300'
+          },
+          status: 200
+        }
+      );
 
     } catch (error) {
       return new Response(
