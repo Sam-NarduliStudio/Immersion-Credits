@@ -199,13 +199,11 @@
       columns: ['Sound', 'Location', 'Credit'],
       server: {
         url: 'https://immersion-credits.sam-1c2.workers.dev/',
-        then: data => data
-          .filter(card => card['Display Name'] && card['Display Name'].trim() !== '')
-          .map(card => [
-            formatName(card.Context, card['Display Name'], card['Alt']),
-            createMapLink(card.Location),
-            card['Credit/Institutions'] || ''
-          ])
+        then: data => data.map(card => [
+          formatName(card.Context, card['Display Name'], card['Alt']),
+          createMapLink(card.Location),
+          card['Credit/Institutions'] || ''
+        ])
       },
       search: true,
       sort: false,
