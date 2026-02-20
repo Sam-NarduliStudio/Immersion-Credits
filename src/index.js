@@ -77,20 +77,22 @@ async function processGristData(env) {
   // Filter by Release = true
   jsonData = jsonData.filter(record => record.Release === 'true' || record.Release === true);
 
-  // Deduplicate by Location (but keep records with no Display Name)
+  // Deduplicate by all fields that matter for display
   const seen = new Map();
   jsonData = jsonData.filter(record => {
-    // Keep records without Display Name (don't deduplicate these)
-    if (!record['Display Name'] || record['Display Name'].trim() === '') {
-      return true;
-    }
+    // Create unique key from all displayed fields
+    const key = [
+      record.Context || '',
+      record['Display Name'] || '',
+      record.Alt || '',
+      record.Location || '',
+      record['Credit/Institutions'] || ''
+    ].join('|');
 
-    // Deduplicate by Location for records with Display Name
-    const location = record.Location || '';
-    if (seen.has(location)) {
-      return false; // Skip duplicate location
+    if (seen.has(key)) {
+      return false; // Skip duplicate
     }
-    seen.set(location, true);
+    seen.set(key, true);
     return true;
   });
 
