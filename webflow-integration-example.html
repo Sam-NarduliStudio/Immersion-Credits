@@ -26,36 +26,51 @@
   <script src="https://cdn.jsdelivr.net/npm/gridjs/dist/gridjs.umd.js"></script>
 
   <script>
-    // Replace with your actual Cloudflare Worker URL after deployment
-    const WORKER_URL = 'https://grist-csv-downloader.YOUR-SUBDOMAIN.workers.dev';
+    // Helper function to create map link from coordinates
+    function createMapLink(location, coordinates) {
+      if (!coordinates || coordinates.trim() === '') {
+        return location || '';
+      }
 
-    // Fetch data from your Cloudflare Worker
-    fetch(WORKER_URL)
-      .then(response => response.json())
-      .then(data => {
-        // Initialize Grid.js
-        new gridjs.Grid({
-          columns: Object.keys(data[0] || {}), // Auto-detect columns from first row
-          data: data.map(row => Object.values(row)), // Convert to array of arrays
-          search: true,
-          sort: true,
-          pagination: {
-            limit: 20
-          },
-          resizable: true,
-          fixedHeader: true,
-          style: {
-            table: {
-              'font-size': '14px'
-            }
-          }
-        }).render(document.getElementById('grid-wrapper'));
-      })
-      .catch(error => {
-        console.error('Error loading data:', error);
-        document.getElementById('grid-wrapper').innerHTML =
-          '<p style="color: red;">Error loading data. Check console for details.</p>';
-      });
+      // Parse coordinates (format: lat,lng,elevation)
+      const coords = coordinates.split(',').map(c => c.trim());
+      if (coords.length >= 2) {
+        const lat = coords[0];
+        const lng = coords[1];
+        const url = `https://www.google.com/maps?q=${lat},${lng}`;
+        return gridjs.html(`<a href="${url}" target="_blank" rel="noopener">${location || 'View Map'}</a>`);
+      }
+
+      return location || '';
+    }
+
+    // Initialize Grid.js with server-side data
+    new gridjs.Grid({
+      columns: ['Display Name', 'Location', 'Context', 'Credit'],
+      server: {
+        url: 'https://immersion-credits.sam-1c2.workers.dev/',
+        then: data => data
+          .filter(card => card['Display Name'] && card['Display Name'].trim() !== '')
+          .map(card => [
+            card['Display Name'],
+            createMapLink(card.Location, card['3d_map_coordinates']),
+            card.Context || '',
+            card['Credit/Institutions'] || ''
+          ])
+      },
+      search: true,
+      sort: true,
+      pagination: {
+        limit: 25
+      },
+      resizable: true,
+      fixedHeader: true,
+      style: {
+        table: {
+          'font-size': '14px'
+        }
+      }
+    }).render(document.getElementById('grid-wrapper'));
   </script>
 </body>
 </html>

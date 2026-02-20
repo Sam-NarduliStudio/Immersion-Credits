@@ -82,7 +82,18 @@ export default {
 
         // Get and parse CSV data
         const csvData = await gristResponse.text();
-        const jsonData = parseCSV(csvData);
+        let jsonData = parseCSV(csvData);
+
+        // Deduplicate by Display Name + Context
+        const seen = new Map();
+        jsonData = jsonData.filter(record => {
+          const key = `${record['Display Name']}|${record.Context}`;
+          if (seen.has(key)) {
+            return false; // Skip duplicate
+          }
+          seen.set(key, true);
+          return true;
+        });
 
         // Create response with CORS headers
         response = new Response(
