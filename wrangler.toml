@@ -7,6 +7,6 @@ compatibility_date = "2024-01-01"
 binding = "IMMERSION_BUCKET"
 bucket_name = "immersion-credits"
 
-# Scheduled trigger - runs every 5 minutes
+# Scheduled trigger - runs every hour
 [triggers]
-crons = ["*/5 * * * *"]
+crons = ["0 * * * *"]
